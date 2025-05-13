@@ -1,0 +1,12 @@
+# File: /content/drive/MyDrive/invokeai/configs/invokeai.yaml
+
+models_dir: /content/invokeai-runtime/models
+convert_cache_dir: /content/invokeai-runtime/convert_cache
+download_cache_dir: /content/invokeai-runtime/downloads
+workflow_thumbnails_dir: /content/invokeai-runtime/workflow_thumbnails
+
+db_dir: /content/drive/MyDrive/invokeai/db
+outputs_dir: /content/drive/MyDrive/invokeai/outputs
+legacy_conf_dir: /content/drive/MyDrive/invokeai/legacy_conf
+custom_nodes_dir: /content/drive/MyDrive/invokeai/extensions/nodes
+style_presets_dir: /content/drive/MyDrive/invokeai/styles
