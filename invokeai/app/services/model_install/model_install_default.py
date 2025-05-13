@@ -130,7 +130,7 @@ class ModelInstallService(ModelInstallServiceBase):
             # that isn't currently mounted. In this case, we don't want to delete the model from the database, but we do
             # want to alert the user and try redownloading the models.
             for model in self._scan_for_missing_models():
-                self._logger.warning(f"Missing model file: {model.name} at {model.path}, attempt to download them")
+                self._logger.warning(f"Missing model file: {model.name} at {model.path}, attempt to redownload them")
                 thread = threading.Thread(target=self.download_and_cache_model, args=(model.source,))
                 thread.start()
 
