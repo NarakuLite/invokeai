@@ -32,6 +32,7 @@ from invokeai.app.services.model_install.model_install_common import (
     StringLikeSource,
     URLModelSource,
 )
+from invokeai.app.services.model_load import ModelLoadService
 from invokeai.app.services.model_records import DuplicateModelException, ModelRecordServiceBase
 from invokeai.app.services.model_records.model_records_base import ModelRecordChanges
 from invokeai.backend.model_manager.config import (
@@ -109,6 +110,23 @@ class ModelInstallService(ModelInstallServiceBase):
     def event_bus(self) -> Optional["EventServiceBase"]:  # noqa D102
         return self._event_bus
 
+
+    def _handle_missing_model_files(self, downloadfn, model_config: AnyModelConfig, recoverfn):
+        download_path = downloadfn(model_config.source)
+        recoverfn(model_config, download_path)
+
+
+    def _recover_missing_models(self, model_config: AnyModelConfig, download_path: Path):
+        dst_path = (self.app_config.models_path / model_config.path).resolve()
+        download_path = download_path.resolve()
+        os.makedirs(os.path.dirname(dst_path), exist_ok=True)  # ensure dest dirs exist
+        if os.path.exists(dst_path):
+            os.remove(dst_path)  # remove existing file to overwrite
+        shutil.move(download_path, dst_path)
+        download_dir = download_path.parent
+        if os.path.isdir(download_dir):
+            shutil.rmtree(download_dir)
+
     # make the invoker optional here because we don't need it and it
     # makes the installer harder to use outside the web app
     def start(self, invoker: Optional[Invoker] = None) -> None:
@@ -131,7 +149,7 @@ class ModelInstallService(ModelInstallServiceBase):
             # want to alert the user and try redownloading the models.
             for model in self._scan_for_missing_models():
                 self._logger.warning(f"Missing model file: {model.name} at {model.path}, attempt to redownload them")
-                thread = threading.Thread(target=self.download_and_cache_model, args=(model.source,))
+                thread = threading.Thread(target=self._handle_missing_model_files, args=(self.download_and_cache_model, model, self._recover_missing_models))
                 thread.start()
 
     def stop(self, invoker: Optional[Invoker] = None) -> None:
