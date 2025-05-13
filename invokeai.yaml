@@ -1,3 +1,5 @@
+schema_version: 4.0.2
+
 # File: /content/drive/MyDrive/invokeai/configs/invokeai.yaml
 
 models_dir: /content/invokeai-runtime/models
