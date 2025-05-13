@@ -122,10 +122,10 @@ class ModelInstallService(ModelInstallServiceBase):
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)  # ensure dest dirs exist
         if os.path.exists(dst_path):
             os.remove(dst_path)  # remove existing file to overwrite
-        shutil.move(download_path, dst_path)
+        move(download_path, dst_path)
         download_dir = download_path.parent
         if os.path.isdir(download_dir):
-            shutil.rmtree(download_dir)
+            rmtree(download_dir)
 
     # make the invoker optional here because we don't need it and it
     # makes the installer harder to use outside the web app
