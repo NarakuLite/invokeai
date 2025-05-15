@@ -70,6 +70,7 @@ class DownloadQueueService(DownloadQueueServiceBase):
         self._requests = requests_session or requests.Session()
         self._accept_download_requests = False
         self._max_parallel_dl = max_parallel_dl
+        self._wait_callbacks = []
 
     def start(self, *args: Any, **kwargs: Any) -> None:
         """Start the download worker threads."""
@@ -79,6 +80,10 @@ class DownloadQueueService(DownloadQueueServiceBase):
             self._stop_event.clear()
             self._start_workers(self._max_parallel_dl)
             self._accept_download_requests = True
+            # Call all waiting callbacks and clear the list
+            for cb, cb_args, cb_kwargs in self._wait_callbacks:
+                threading.Thread(target=cb, args=cb_args, kwargs=cb_kwargs, daemon=True).start()
+            self._wait_callbacks.clear()
 
     def stop(self, *args: Any, **kwargs: Any) -> None:
         """Stop the download worker threads."""
@@ -456,6 +461,16 @@ class DownloadQueueService(DownloadQueueServiceBase):
     ########################################
     # callbacks used for multifile downloads
     ########################################
+    def wait_for_start(self, callback, *args, **kwargs):
+        """
+        Wait until the download service is started, then call the callback with provided arguments.
+        If already started, call immediately. Never blocks the main thread.
+        """
+        if self._accept_download_requests:
+            threading.Thread(target=callback, args=args, kwargs=kwargs, daemon=True).start()
+        else:
+            self._wait_callbacks.append((callback, args, kwargs))
+
     def _mfd_started(self, download_job: DownloadJob) -> None:
         self._logger.info(f"File download started: {download_job.source}")
         with self._lock:
