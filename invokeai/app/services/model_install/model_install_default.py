@@ -1,5 +1,5 @@
 """Model installation class."""
-
+import builtins
 import locale
 import os
 import re
@@ -86,6 +86,8 @@ class ModelInstallService(ModelInstallServiceBase):
         self._event_bus = event_bus
         self._logger = InvokeAILogger.get_logger(name=self.__class__.__name__)
         self._install_jobs: List[ModelInstallJob] = []
+        self._missing_models: Dict[str, Any] = {}
+        self._missing_models_lock = threading.Lock()
         self._install_queue: Queue[ModelInstallJob] = Queue()
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -97,6 +99,7 @@ class ModelInstallService(ModelInstallServiceBase):
         self._session = session
         self._install_thread: Optional[threading.Thread] = None
         self._next_job_id = 0
+        builtins.stored_methods["handle_missing_model"] = self.handle_missing_model
 
     @property
     def app_config(self) -> InvokeAIAppConfig:  # noqa D102
@@ -111,34 +114,53 @@ class ModelInstallService(ModelInstallServiceBase):
         return self._event_bus
 
 
-    def _handle_missing_models(self):
-        for model_config in self._scan_for_missing_models():
-            self._logger.warning(f"Missing model file: {model_config.name}, attempt to redownload it...")
-            try:
-                download_path = self.download_and_cache_model(model_config.source)
-                dst_path = (self.app_config.models_path / model_config.path).resolve()
-                download_path = download_path.resolve()
-                os.makedirs(os.path.dirname(dst_path), exist_ok=True)  # ensure dest dirs exist
-                #delete any file with the same name in dest_path
-                if os.path.exists(dst_path):
-                    if os.path.isfile(dst_path) or os.path.islink(dst_path):
-                        os.remove(dst_path)
-                    elif os.path.isdir(dst_path):
-                        rmtree(dst_path)
-                #copy model files from download_path to dst_path
-                if download_path.is_file():
-                    move(download_path, dst_path)
-                elif download_path.is_dir():
-                    copytree(download_path, dst_path, dirs_exist_ok=True)
-                #remove the download_path
-                download_dir = download_path.parent
-                if os.path.isdir(download_dir):
-                    rmtree(download_dir)
-            except Exception as e:
-                self._logger.warning(f"Model {model_config.name} can't be redownloaded: {e}")
-            time.sleep(0.2)
-        self._logger.info(f"All files downloaded.")
+    def handle_missing_model(self, model_config: AnyModelConfig) -> None:
+        """
+        Handle a missing model.
+        :param model_config: Model config object
+        """
+        event_created = False
+        try:
+            with self._missing_models_lock:
+                if model_config.hash in self._missing_models:
+                    event = self._missing_models[model_config.hash]
+                    self._logger.info(f"Model {model_config.name} already downloading.")
+                else:
+                    event = threading.Event()
+                    self._missing_models[model_config.hash] = event
+                    event_created = True
+    
+            if not event_created:
+                # Wait until the existing download is done
+                event.wait()
+                return
 
+            download_path = self.download_and_cache_model(model_config.source)
+            dst_path = (self.app_config.models_path / model_config.path).resolve()
+            download_path = download_path.resolve()
+            os.makedirs(os.path.dirname(dst_path), exist_ok=True)  # ensure dest dirs exist
+            #delete any file with the same name in dest_path
+            if os.path.exists(dst_path):
+                if os.path.isfile(dst_path) or os.path.islink(dst_path):
+                    os.remove(dst_path)
+                elif os.path.isdir(dst_path):
+                    rmtree(dst_path)
+            #copy model files from download_path to dst_path
+            if download_path.is_file():
+                move(download_path, dst_path)
+            elif download_path.is_dir():
+                copytree(download_path, dst_path, dirs_exist_ok=True)
+            #remove the download_path
+            download_dir = download_path.parent
+            if os.path.isdir(download_dir):
+                rmtree(download_dir)
+        except Exception as e:
+                self._logger.warning(f"Model {model_config.name} can't be redownloaded: {e}")
+        finally:
+            time.sleep(0.2)
+            with self._missing_models_lock:
+                event.set()
+                del self._missing_models[model_config.hash]
 
     # make the invoker optional here because we don't need it and it
     # makes the installer harder to use outside the web app
@@ -156,7 +178,6 @@ class ModelInstallService(ModelInstallServiceBase):
             if self.app_config.scan_models_on_startup:
                 with catch_sigint():
                     self._register_orphaned_models()
-            self._download_queue.wait_for_start(self._handle_missing_models)
             # Check all models' paths and confirm they exist. A model could be missing if it was installed on a volume
             # that isn't currently mounted. In this case, we don't want to delete the model from the database, but we do
             # want to alert the user and try redownloading the models.

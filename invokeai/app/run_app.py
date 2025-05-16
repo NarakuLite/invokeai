@@ -1,4 +1,5 @@
 import uvicorn
+import builtins
 
 from invokeai.app.invocations.load_custom_nodes import load_custom_nodes
 from invokeai.app.services.config.config_default import get_config
@@ -6,6 +7,7 @@ from invokeai.app.util.torch_cuda_allocator import configure_torch_cuda_allocato
 from invokeai.backend.util.logging import InvokeAILogger
 from invokeai.frontend.cli.arg_parser import InvokeAIArgs
 
+builtins.stored_methods = { }
 
 def get_app():
     """Import the app and event loop. We wrap this in a function to more explicitly control when it happens, because

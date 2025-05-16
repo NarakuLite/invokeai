@@ -1,12 +1,12 @@
 # Copyright (c) 2024, Lincoln D. Stein and the InvokeAI Development Team
 """Default implementation of model loading in InvokeAI."""
+import builtins
 
 from logging import Logger
 from pathlib import Path
 from typing import Optional
 
 from invokeai.app.services.config import InvokeAIAppConfig
-from invokeai.app.services.model_install.model_install_default import ModelInstallService
 from invokeai.backend.model_manager.config import AnyModelConfig, DiffusersConfigBase, InvalidModelConfigException
 from invokeai.backend.model_manager.load.load_base import LoadedModel, ModelLoaderBase
 from invokeai.backend.model_manager.load.model_cache.cache_record import CacheRecord
@@ -27,13 +27,11 @@ class ModelLoader(ModelLoaderBase):
     def __init__(
         self,
         app_config: InvokeAIAppConfig,
-        model_install: ModelInstallService,
         logger: Logger,
         ram_cache: ModelCache,
     ):
         """Initialize the loader."""
         self._app_config = app_config
-        self._model_install = model_install
         self._logger = logger
         self._ram_cache = ram_cache
         self._torch_dtype = TorchDevice.choose_torch_dtype()
@@ -53,8 +51,8 @@ class ModelLoader(ModelLoaderBase):
         model_path = self._get_model_path(model_config)
 
         if not model_path.exists():
-            self._model_install
-            raise InvalidModelConfigException(f"Files for model '{model_config.name}' not found at {model_path}")
+            builtins.stored_methods["handle_missing_model"](model_config)
+            #raise InvalidModelConfigException(f"Files for model '{model_config.name}' not found at {model_path}")
 
         with skip_torch_weight_init():
             cache_record = self._load_and_cache(model_config, submodel_type)
